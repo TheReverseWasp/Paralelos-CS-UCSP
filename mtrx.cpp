@@ -21,15 +21,13 @@ void multiply(ll _1[MAX][MAX], ll _2[MAX][MAX], ll _3[MAX][MAX], int N)
         }
     }
 }
-///
-
 void sixloop(ll _1[MAX][MAX], ll _2[MAX][MAX], ll _3[MAX][MAX], int b, int N){
   for(int i0=0; i0<N; i0+=b ){
     for(int j0=0; j0<N; j0+=b){
-      for(int k0; k0<N; k0+=b){
+      for(int k0=0; k0<N; k0+=b){
         for(int i=i0; i<min(i0+b-1,N); ++i){
-          for(int j=j0; i<min(j0+b-1,N); ++j){
-            for(int k=k0; i<min(k0+b-1,N); ++k){
+          for(int j=j0; j<min(j0+b-1,N); ++j){
+            for(int k=k0; k<min(k0+b-1,N); ++k){
               _3[i][j]+=_1[i][k]*_2[k][j];
             }
           }
