@@ -2,7 +2,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#define NUM_THREADS	4
+#include <time.h>
+
+#define NUM_THREADS	8
 #define n 10000000
 long acum = 0;
 long a[n]{1};
@@ -38,6 +40,7 @@ int main (int argc, char *argv[])
   pthread_attr_init(&attr);
   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
+  clock_t o=clock();
   for(t=0; t<NUM_THREADS; t++) {
      printf("Main: creating thread %ld\n", t);
      rc = pthread_create(&thread[t], &attr, BusyWork, (void *)t);
@@ -59,5 +62,7 @@ int main (int argc, char *argv[])
   }
   printf("La suma es: %ld\n", acum);
   printf("Main: program completed. Exiting.\n");
+  o = clock() - o;
+  printf ("BW took me %d clicks (%f seconds).\n",o,((float)o)/CLOCKS_PER_SEC);
   pthread_exit(NULL);
 }
