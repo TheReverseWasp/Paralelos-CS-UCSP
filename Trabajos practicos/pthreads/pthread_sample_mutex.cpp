@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#define NUM_THREADS	4
+#define NUM_THREADS	32
 #define n 10000000
 long acum = 0;
 long a[n];
@@ -44,6 +44,7 @@ int main (int argc, char *argv[])
   pthread_attr_init(&attr);
   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
   ///
+  clock_t o=clock();
   if (pthread_mutex_init(&mtx, NULL) != 0)
   {
       printf("\n mtx init failed\n");
@@ -71,6 +72,8 @@ int main (int argc, char *argv[])
      }
   printf("La suma es: %ld\n", acum);
   printf("Main: program completed. Exiting.\n");
+  o = clock() - o;
+  printf ("mutex took me %d clicks (%f seconds).\n",o,((float)o)/CLOCKS_PER_SEC);
   pthread_mutex_destroy(&mtx);
   pthread_exit(NULL);
 }
