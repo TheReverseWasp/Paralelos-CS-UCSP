@@ -57,19 +57,19 @@ int main(int argc, char const *argv[]) {
     cout << endl;
   }
   for (size_t i = 0; i < MAX; i++) {
-    MPI_Bcast(a[i], MAX, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(b[i], MAX, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(c[i], MAX, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&a[i], MAX, MPI_LONG_LONG, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&b[i], MAX, MPI_LONG_LONG, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&c[i], MAX, MPI_LONG_LONG, 0, MPI_COMM_WORLD);
   }
   if(my_rank == 0){
     for (int i = 1; i <= MAX; i++) {
-      MPI_Recv(c[i - 1], MAX, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+      MPI_Recv(c[i - 1], MAX, MPI_LONG_LONG, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     }
     print_m(c);
   }
   else{
     multiply(a, b, c, my_rank - 1);
-    MPI_Send(c[my_rank - 1], MAX, MPI_INT, 0, 0, MPI_COMM_WORLD);
+    MPI_Send(c[my_rank - 1], MAX, MPI_LONG_LONG, 0, 0, MPI_COMM_WORLD);
   }
 
   MPI_Finalize();
