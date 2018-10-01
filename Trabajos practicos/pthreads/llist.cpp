@@ -6,11 +6,12 @@
 #include <iostream>
 #include <time.h>
 
-#define siz 100
-#define NUM_THREADS	1
+#define siz 100000
+#define NUM_THREADS	4
 
 using namespace std;
 
+pthread_mutex_t mtx;
 
 struct node {
   int data;
@@ -21,46 +22,39 @@ struct node {
   }
   ~node(){
     delete next;
-    next=0;
+    next = 0;
   }
 };
 struct llist{
   node* head;
+  ///
   llist(){
-    head=0;
+    head = 0;
   }
-  bool insert(int num, int EXP_pos){
-    int i = 0;
-    node** temp = &head, **prev = &head;
-    while (i <= EXP_pos) {
-      if ((*temp) != 0 && (*temp) -> data > num) {
-        (*prev) -> next = new node(num);
-        (*prev) -> next -> next = (*temp);
-        return 1;
+  bool insert(int num){
+    node *temp, **temp2;
+    bool ok = 0;
+    temp2 = &head;
+    while (ok == 0) {
+      pthread_mutex_lock(&mtx);
+      if ((*temp2) == 0) {
+        (*temp2) = new node(num);
+        ok = 1;
       }
-      if (i < EXP_pos) {
-        while ((*temp) == 0) {
-          sched_yield();
-        }
-        if ((*temp) -> data > num) {
-          (*prev) -> next = new node(num);
-          (*prev) -> next -> next = (*temp);
-        }
-        else {
-          ++i;
-          (*prev) = (*temp);
-          (*temp) = (*temp) -> next;
-        }
+      else if ((*temp2) -> data > num) {
+        temp = (*temp2);
+        (*temp2)= new node(num);
+        (*temp2) -> next = temp;
+        ok = 1;
       }
-      else if (i == EXP_pos){
-        if ((*temp) == 0) {
-          (*temp) = new node(num);
-          return 1;
-        }
+      pthread_mutex_unlock(&mtx);
+      if (ok == 0) {
+        temp2 = &((*temp2) -> next);
       }
     }
-
+    return 0;
   }
+  ///
   void print_l(node* runner){
     if (runner == 0) {
       cout << "//" << endl;
@@ -71,19 +65,19 @@ struct llist{
   }
   void print_l(){
     if (head == 0) {
-      cout << "//" << endl;
+      cout << "vacio" << endl;
       return;
     }
     cout << head -> data << " -> ";
     print_l(head -> next);
   }
 }milista;
-int a[siz];
 ///
 void *fun(void *rank) {
   long my_rank = (long) rank;
   for (int i = my_rank; i < siz; i += NUM_THREADS) {
-    milista.insert(i, i);
+    //cout << i << " ";
+    milista.insert(i);
   }
   return NULL;
 }
@@ -98,13 +92,15 @@ int main(int argc, char const *argv[]) {
   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
   srand(time(NULL));
   ///
-  for (int i = 0; i < siz; i++) {
-    a[i] = rand();
-  }
-  ///
   clock_t o=clock();
   ///
-  for(t=0; t<NUM_THREADS; t++) {
+  if (pthread_mutex_init(&mtx, NULL) != 0)
+  {
+      printf("\n mtx init failed\n");
+      return 1;
+  }
+  ///
+  for(t = 0; t < NUM_THREADS; t++) {
      printf("Main: creating thread %ld\n", t);
      rc = pthread_create(&thread[t], &attr, fun, (void *)t);
      if (rc) {
@@ -115,7 +111,7 @@ int main(int argc, char const *argv[]) {
 
   /* Free attribute and wait for the other threads */
   pthread_attr_destroy(&attr);
-  for(t=0; t<NUM_THREADS; t++) {
+  for(t = 0; t<NUM_THREADS; t++) {
    rc = pthread_join(thread[t], &status);
    if (rc) {
     printf("ERROR; return code from pthread_join() is %d\n", rc);
@@ -124,4 +120,5 @@ int main(int argc, char const *argv[]) {
    //printf("Main: completed join with thread %ld having a status of %ld\n",t,(long)status);
   }
   milista.print_l();
+  pthread_mutex_destroy(&mtx);
 }
