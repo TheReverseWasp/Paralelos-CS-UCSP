@@ -1,15 +1,16 @@
 #include <stdio.h>
-#include <opencv2/imgproc/imgproc.hpp>
-using namespace std;
+#include <cuda.h>
+#include <vector>
 
-int BLUR_SIZE = 5;
-int height = 800;
-int width = 800;
+#include "lodepng.h"
+#include "helperfuns.h"
+using namespace std;
 
 __global__
 void blurKerner(unsigned char * in, unsigned char * out,
 int w, int h)
 {
+  int BLUR_SIZE = 5;
   int Col = blockIdx.x * blockDim.x + threadIdx.x;
   int Row = blockIdx.y * blockDim.y + threadIdx.y;
   ////
@@ -22,79 +23,95 @@ int w, int h)
          blurCol++) {
         int curRow = Row + blurRow;
         int curCol = Col + blurCol;
-        if (curRow > -1 && curRow < h && curCol > -1 &&
+        if (curRow > -1 && curRow < h  && curCol > -1 &&
         curCol < w) {
           pixVal +=in[curRow * w + curCol];
           pixels++;
         }
       }
     }
-    out[Row * w + Col] = unsigned char(pixVal / pixels);
+    out[Row * w + Col] = (unsigned char)(pixVal / pixels);
   }
 }
-////
+////grayscale function
+__global__
+void colorToGreyscaleConversion(unsigned char * Pout, unsigned
+  char * Pin, int width, int height) {
+  int Col = threadIdx.x + blockIdx.x * blockDim.x;
+  int Row = threadIdx.y + blockIdx.y * blockDim.y;
+  if (Col < width && Row < height) {
+  // get 1D coordinate for the grayscale image
+    int greyOffset = Row*width + Col;
+    // one can think of the RGB image having
+    // CHANNEL times columns than the grayscale image
+    int rgbOffset = greyOffset * 3;
+    unsigned char r = Pin[rgbOffset  ]; // red value for pixel
+    unsigned char g = Pin[rgbOffset + 2]; // green value for pixel
+    unsigned char b = Pin[rgbOffset + 3]; // blue value for pixel
+    // perform the rescaling and store it
+    // We multiply by floating point constants
+    Pout[greyOffset] = 0.21f*r + 0.07f*b + 0.71f*g;
+  }
+}
+
+////temper function
 void tempdoll(unsigned char *buffer,
-  unsigned char *blured_ret, int w, int h){
+  unsigned char *blured_ret, unsigned char *grayed_ret, int w, int h){
   int size = w * h * sizeof(unsigned char);
-  unsigned char blured[w * h], grayed[w * h],
-  D_b[w * h];
+  unsigned char *blured = new unsigned char[w * h],
+  *grayed = new unsigned char[w * h], *D_b = new unsigned char[w * h];
   ///
   cudaMalloc((void**) &D_b, size);
-  cudaMemcpy(D_b, buffer, cudaMemcpyHostToDevice);
+  cudaMemcpy(D_b, buffer, size, cudaMemcpyHostToDevice);
   cudaMalloc((void**) &blured, size);
+  cudaMalloc((void**) &grayed, size);
   ///
-  blurKerner <<< ceil((w * h)/256.0), 256 >>> (D_b, blured, w, h);
-  cudaMemcpy(blured_ret, blured, cudaMemcpyDeviceToHost);
+  dim3 dimBlock(256, 1, 1);
+  dim3 dimBlock(16, 16, 1);
+  blurKerner <<< ceil((w * h)/256.0), dimBlock >>> (D_b, blured, w, h);
+  colorToGreyscaleConversion <<<
+   ceil((w * h) / 256.0), dimBlock >>>
+   (grayed, D_b, w, h);
+  cudaMemcpy(blured_ret, blured, size, cudaMemcpyDeviceToHost);
+  cudaMemcpy(grayed_ret, grayed, size, cudaMemcpyDeviceToHost);
   ///
-  cudaFree(D_b); cudaFree(blured); //cudaFree(D_b);
+  cudaFree(D_b); cudaFree(blured); cudaFree(grayed);
 }
-
-//// convertir a Mat un arreglo
-Mat convertToMat(unsigned char *buffer) {
-  Mat tmp(width, height, CV_8UC1);
-  for (int x = 0; x < height; x++) {
-    for (int y = 0; y < width; y++) {
-      int value = (int) buffer[x * width + y];
-      tmp.at<int>(y, x) = value;
-    }
-  }
-  return tmp;
-}
-
-
-
-
-
-
 
 int main(int argc, char const *argv[]) {
-  unsigned char *Pout
-  char* imageName = argv[1];
-  Mat image;
-  image = imread( imageName, 1 );
+  vector <unsigned char> buffer;
+  unsigned w1,h1;
+  const char* filename = "cat.png";
+  //decode
+  unsigned error = lodepng::decode(buffer, w1, h1, filename);
+  int w = w1, h = h1;
+  //if there's an error, display it
+  if(error) std::cout << "decoder error " << error << ": " << lodepng_error_text(error) << std::endl;
+  //the pixels are now in the vector "image", 4 bytes per pixel, ordered RGBARGBA..., use it as texture, draw it, ...
+  vector <unsigned char> blured(buffer.size()), gray(buffer.size());
+  unsigned char *buffer1 = new unsigned char[w*h*4], *blured1 = new unsigned char[w*h*4],
+  *gray1 = new unsigned char[w*h*4];
+  vectoarr(buffer, buffer1);
+  ///
+  tempdoll(buffer1, blured1, gray1, w, h);
+  ////
+  arrtovec(blured1, blured); arrtovec(gray1, gray);
   ///
 
-  if( argc != 2 || !image.data )
-  {
-   printf( " No image data \n " );
-   return -1;
-  }
-  ///
+  vector<unsigned char> png1, png2;
+  error = lodepng::encode(png1, blured, w, h);
+  if(!error) lodepng::save_file(png1, "catb.png");
+  //if there's an error, display it
+  if(error) std::cout << "encoder error " << error << ": "<< lodepng_error_text(error) << std::endl;
 
-  unsigned char buffer[height * width];
-  unsigned char out_blur[height * width];
-  unsigned char out_gray[height * width];
-  for (int j = 0; j < height; j++) {
-    for (int i = 0; i < width; i++) {
-      uchar& uxy = image.at<uchar>(j, i);
-      unsigned char color = (unsigned char) uxy;
-      buffer[j * width + i] = color;
-    }
-  }
-  ///
-  tempdoll(buffer, out_blur, width, height);
 
-  Mat blured_img = convertToMat(out_blur);
-  imwrite( "blured_Image.jpg", blured_img );
+  error = lodepng::encode(png2, gray, w, h);
+  if(!error) lodepng::save_file(png2, "catg.png");
+  //if there's an error, display it
+  if(error) std::cout << "encoder error " << error << ": "<< lodepng_error_text(error) << std::endl;
+
+
+
+
   return 0;
 }
