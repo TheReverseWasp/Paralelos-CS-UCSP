@@ -2,37 +2,40 @@
 #include <algorithm>
 #include <vector>
 #include <utility>
-#include <cuda.cu>
+#include <cuda.h>
 #include <fstream>
 
 #define uint unsigned int
 #define Leaves 256
 #define defsize 2
-#define arrsize 64 /// if dataset grows increse 50
+#define arrsize 64 /// if dataset grows increse 64
 #define levels 5
+
 using namespace std;
 
 
 /****************************************add to struct*****************************************************/
+
 __device__
-float add_itself (pair <string, int> **c_dis, int **actual_pos, pair <string, int> elem, uint lvl) {
+void add_itself (pair <char*, int> **c_dis, int **actual_pos, pair <char*, int> elem, uint lvl) {
   uint tpos = blockIdx.x * blockDim.x + threadIdx.x;
-  uint eval = (lvl + 1) + defsize;
+  uint eval = (lvl + 1) * defsize;
+  uint peval = lvl * defsize;
   if (actual_pos[tpos][lvl] == eval) {
     if (lvl == levels - 1) {
-      return 0f;
+      return;
     }
     for (uint i = 0; i < eval; i++) {
-      add_itself (c_dis, actual_pos, c_dis[tpos][i], lvl + 1);
+      (add_itself (c_dis, actual_pos, c_dis[tpos][eval - peval + i], lvl + 1));
     }
     actual_pos[tpos][lvl] = 0;
-    add_itself(c_dis, actual_pos, elem, lvl);
+    (add_itself (c_dis, actual_pos, elem, lvl));
   }
-  return 1f;
+  return;
 }
 
 __global__
-void add(pair <string, int> **c_dis, int **actual_pos, pair <string, int> *lines, uint sizelines) {
+void add (pair <char*, int> **c_dis, int **actual_pos, pair <char*, int> *lines, uint sizelines) {
   uint tpos = blockIdx.x * blockDim.x + threadIdx.x;
   if (tpos < Leaves) {
     for (uint i = tpos; i < sizelines; i += Leaves) {
@@ -43,7 +46,7 @@ void add(pair <string, int> **c_dis, int **actual_pos, pair <string, int> *lines
 /****************************************search on struct*****************************************************/
 
 __global__
-void search (pair <string, int> **c_dis, int **actual_pos, string to_search, uint &threadID, uint &elemeID) {
+void search (pair <char*, int> **c_dis, int **actual_pos, char* to_search, uint &threadID, uint &elemeID) {
   uint tpos = blockIdx.x * blockDim.x + threadIdx.x;
   if (tpos < Leaves) {
     for (uint j = 0; j < levels; j++) {
@@ -64,9 +67,9 @@ void search (pair <string, int> **c_dis, int **actual_pos, string to_search, uin
 
 void tempdoll () {
   /////////////////////////////struct///////////////////////////////////////
-  pair <string, int> **c_dis = new pair <string, int> *[Leaves];
+  pair <char*, int> **c_dis = new pair <char*, int> *[Leaves];
   for (uint i = 0; i < Leaves; ++i) {
-    c_dis[i] = new pair <string, int> [arrsize];
+    c_dis[i] = new pair <char*, int> [arrsize];
   }
   int **actual_pos = new int* [Leaves];
   for (uint i = 0; i < Leaves; i++) {
@@ -75,23 +78,28 @@ void tempdoll () {
       actual_pos[i][j] = 0;
     }
   }
-  int sizepair = Leaves * arrsize * sizeof (pair <string, int>), sizepos = Leaves * levels * sizeof (Int);
+  int sizepair = Leaves * arrsize * sizeof (pair <char*, int>), sizepos = Leaves * levels * sizeof (int);
   cudaMalloc((void**) c_dis, sizepair);
   cudaMalloc((void**) actual_pos, sizepos);
   /////////////////////////////input///////////////////////////////////////
-  vector <string, int> linesonv;
-  pair <string, int> temp;
+  vector <pair <char*, int> > linesonv;
+  pair <char*, int> temp;
+  temp.first = new char[6];
+  string templine;
   int c = 0;
-  while (getline (my_file, temp.first)) {
+  ifstream my_file("dataset.txt");
+  while (getline (my_file, templine)) {
     temp.second = c;
+    strcpy(temp.first, templine.c_str());
     linesonv.push_back (temp);
     ++c;
   }
-  pair <string, int> *lines = new pair <string, int> [linesonv.size ()];
+  my_file.close ();
+  pair <char*, int> *lines = new pair <char*, int> [linesonv.size ()];
   for (uint i = 0; i < linesonv.size (); i++) {
     lines[i] = linesonv[i];
   }
-  int sizeinput = linesonv.size() * sizeof(pair <string, int>);
+  int sizeinput = linesonv.size() * sizeof(pair <char*, int>);
   cudaMalloc((void **) &lines, sizeinput);
   /////////////////////////////add elements///////////////////////////////////////
   dim3 dimGrid(256);
@@ -99,9 +107,13 @@ void tempdoll () {
   add <<< dimGrid, dimBlock >>> (c_dis, actual_pos, lines, c);
   /////////////////////////////search elements///////////////////////////////////////
   uint threadID, elemeID;
-  string to_search = "gooks";
+  char *to_search = "jukes";
   search <<< dimGrid, dimBlock >>> (c_dis, actual_pos, to_search, threadID, elemeID);
-  cout << to_search << "found on thread " << threadID << " and its value is " << elemeID <<endl;
+  cout << to_search << " found on thread " << threadID << " and its value is " << elemeID <<endl;
+  ///////////////////////////////////////free///////////////////////////////////////
+  cudaFree (lines); cudaFree (c_dis); cudaFree(actual_pos);
+
+
 }
 
 
